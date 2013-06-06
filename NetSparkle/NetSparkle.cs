@@ -431,7 +431,7 @@ namespace NetSparkle
             }
             catch (Exception e)
             {
-                // show the exeception message 
+                // show the exception message
                 ReportDiagnosticMessage("Error during app cast download: " + e.Message);
 
                 // just null the version info
@@ -443,7 +443,7 @@ namespace NetSparkle
                 ReportDiagnosticMessage("No version information in app cast found");
                 return UpdateStatus.CouldNotDetermine;
             }
-            ReportDiagnosticMessage("Lastest version on the server is " + latestVersion.Version);
+            ReportDiagnosticMessage("Latest version on the server is " + latestVersion.Version);
 
             // set the last check time
             ReportDiagnosticMessage("Touch the last check timestamp");
@@ -596,10 +596,15 @@ namespace NetSparkle
             }
             if (".msi".Equals(installerExt, StringComparison.CurrentCultureIgnoreCase))
             {
-                // buid the command line
+                // build the command line
                 return "msiexec /i \"" + downloadFileName + "\"";
             }
-            throw new InvalidDataException("Unknown installer format");
+			if (".msp".Equals(installerExt, StringComparison.CurrentCultureIgnoreCase))
+			{
+				// build the command line
+				return "msiexec /p \"" + downloadFileName + "\"";
+			}
+			throw new InvalidDataException("Unknown installer format");
         }
 
         /// <summary>
