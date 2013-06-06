@@ -17,7 +17,8 @@ namespace NetSparkle
         private const String enclosureNode = "enclosure";
         private const String releaseNotesLinkNode = "sparkle:releaseNotesLink";
         private const String versionAttribute = "sparkle:version";
-        private const String dasSignature = "sparkle:dsaSignature";
+		private const String deltaFromAttribute = "sparkle:deltaFrom";
+		private const String dasSignature = "sparkle:dsaSignature";
         private const String urlAttribute = "url";
 
         /// <summary>
@@ -44,7 +45,7 @@ namespace NetSparkle
                 var path = _castUrl.Replace("file://", "");
                 using (var reader = XmlReader.Create(path))
                 {
-                    latestVersion = ReadAppCast(reader, latestVersion);
+					latestVersion = ReadAppCast(reader, latestVersion, _config.InstalledVersion);
                 }
             }
             else
@@ -59,7 +60,7 @@ namespace NetSparkle
                 {
                     using (XmlTextReader reader = new XmlTextReader(inputstream))
                     {
-                        latestVersion = ReadAppCast(reader, latestVersion);
+						latestVersion = ReadAppCast(reader, latestVersion, _config.InstalledVersion);
                     }
                 }
             }
@@ -70,9 +71,14 @@ namespace NetSparkle
         }
 
         private static NetSparkleAppCastItem ReadAppCast(XmlReader reader,
-                                                         NetSparkleAppCastItem latestVersion)
+                                                         NetSparkleAppCastItem latestVersion, string installedVersion)
         {
             NetSparkleAppCastItem currentItem = null;
+
+			// The fourth segment of the version number is ignored by Windows Installer:
+			var installedVersionV = new Version(installedVersion);
+			var installedVersionWithoutFourthSegment = new Version(installedVersionV.Major, installedVersionV.Minor,
+																   installedVersionV.Build);
 
             while (reader.Read())
             {
@@ -91,13 +97,16 @@ namespace NetSparkle
                                 break;
                             }
                         case enclosureNode:
-                            {
-                                currentItem.Version = reader.GetAttribute(versionAttribute);
-                                currentItem.DownloadLink = reader.GetAttribute(urlAttribute);
-                                currentItem.DSASignature = reader.GetAttribute(dasSignature);
-
-                                break;
-                            }
+							{
+								var deltaFrom = reader.GetAttribute(deltaFromAttribute);
+								if (deltaFrom == null || deltaFrom == installedVersionWithoutFourthSegment.ToString())
+								{
+									currentItem.Version = reader.GetAttribute(versionAttribute);
+									currentItem.DownloadLink = reader.GetAttribute(urlAttribute);
+									currentItem.DSASignature = reader.GetAttribute(dasSignature);
+								}
+								break;
+							}
                     }
                 }
                 else if (reader.NodeType == XmlNodeType.EndElement)
