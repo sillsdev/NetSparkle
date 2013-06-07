@@ -71,7 +71,7 @@ namespace NetSparkle
         private readonly Icon _applicationIcon;       
         private TimeSpan _checkFrequency;
 
-        private string _downloadTempFileName;
+        private string _downloadTempFilePath;
         private WebClient _webDownloadClient;
 
         /// <summary>
@@ -175,6 +175,16 @@ namespace NetSparkle
         /// the application will be updated without user interaction
         /// </summary>
         public bool EnableSilentMode { get; set; }
+
+	    /// <summary>
+	    /// If your installer launches the app when it finishes, you don't want this thing to launch it as well. Defaults to TRUE.
+	    /// </summary>
+	    public bool DoLaunchAfterUpdate = true;
+
+		/// <summary>
+		/// For example, use "/qb" to skip most of the UI, such as asking them to agree to the license again. The full list is at http://support.microsoft.com/kb/227091.
+		/// </summary>
+	    public string CustomInstallerArguments="";
 
         /// <summary>
         /// This property returns true when the upadete loop is running
@@ -549,7 +559,7 @@ namespace NetSparkle
             string fileName = segments[segments.Length - 1];
 
             // get temp path
-            _downloadTempFileName = Environment.ExpandEnvironmentVariables("%temp%\\" + fileName);
+            _downloadTempFilePath = Environment.ExpandEnvironmentVariables("%temp%\\" + fileName);
             if (ProgressWindow == null)
             {
                 ProgressWindow = UIFactory.CreateProgressWindow(item, _applicationIcon);
@@ -575,7 +585,7 @@ namespace NetSparkle
             _webDownloadClient.DownloadFileCompleted += OnWebDownloadClientDownloadFileCompleted;
 
             Uri url = new Uri(item.DownloadLink);
-            _webDownloadClient.DownloadFileAsync(url, _downloadTempFileName);
+            _webDownloadClient.DownloadFileAsync(url, _downloadTempFilePath);
 
             ProgressWindow.ShowDialog();
         }
@@ -583,26 +593,24 @@ namespace NetSparkle
         /// <summary>
         /// Return installer runner command. May throw InvalidDataException
         /// </summary>
-        /// <param name="downloadFileName"></param>
+        /// <param name="downloadFilePath"></param>
         /// <returns></returns>
-        protected virtual string GetInstallerCommand(string downloadFileName)
+        protected virtual string GetInstallerCommand(string downloadFilePath)
         {
-            // get the file type
-            string installerExt = Path.GetExtension(downloadFileName);
-            if (".exe".Equals(installerExt, StringComparison.CurrentCultureIgnoreCase))
+            var extension = Path.GetExtension(downloadFilePath);
+            if (".exe".Equals(extension, StringComparison.CurrentCultureIgnoreCase))
             {
-                // build the command line 
-                return downloadFileName;
+				return downloadFilePath + " " +CustomInstallerArguments;
             }
-            if (".msi".Equals(installerExt, StringComparison.CurrentCultureIgnoreCase))
+            if (".msi".Equals(extension, StringComparison.CurrentCultureIgnoreCase))
             {
                 // build the command line
-                return "msiexec /i \"" + downloadFileName + "\"";
+				return "msiexec /i \"" + downloadFilePath + "\"";
             }
-			if (".msp".Equals(installerExt, StringComparison.CurrentCultureIgnoreCase))
+			if (".msp".Equals(extension, StringComparison.CurrentCultureIgnoreCase))
 			{
 				// build the command line
-				return "msiexec /p \"" + downloadFileName + "\"";
+				return "msiexec /p \"" + downloadFilePath + "\"";
 			}
 			throw new InvalidDataException("Unknown installer format");
         }
@@ -613,42 +621,45 @@ namespace NetSparkle
         private void RunDownloadedInstaller()
         {
             // get the commandline 
-            string cmdLine = Environment.CommandLine;
+            string commandLineThatLaunchTheClientApp = Environment.CommandLine;
             string workingDir = Environment.CurrentDirectory;
 
             // generate the batch file path
-            string cmd = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".cmd");
+            string pathToOurInstallBatchFile = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".cmd");
             string installerCmd;
             try
             {
-                installerCmd = GetInstallerCommand(_downloadTempFileName);
+                installerCmd = GetInstallerCommand(_downloadTempFilePath);
             }
             catch (InvalidDataException)
             {
-                UIFactory.ShowUnknownInstallerFormatMessage(_downloadTempFileName);
+                UIFactory.ShowUnknownInstallerFormatMessage(_downloadTempFilePath);
                 return;
             }
 
             // generate the batch file                
-            ReportDiagnosticMessage("Generating MSI batch in " + Path.GetFullPath(cmd));
+            ReportDiagnosticMessage("Generating MSI batch in " + Path.GetFullPath(pathToOurInstallBatchFile));
 
-            using (StreamWriter write = new StreamWriter(cmd))
-            {
-                write.WriteLine(installerCmd);
-                write.WriteLine("cd " + workingDir);
-                write.WriteLine(cmdLine);
-                write.Close();
+	        using (StreamWriter write = new StreamWriter(pathToOurInstallBatchFile))
+	        {
+		        write.WriteLine(installerCmd);
+		        if (DoLaunchAfterUpdate)
+		        {
+			        write.WriteLine("cd " + workingDir);
+					write.WriteLine(commandLineThatLaunchTheClientApp);
+		        }
+		        write.Close();
             }
 
             // report
-            ReportDiagnosticMessage("Going to execute batch: " + cmd);
+            ReportDiagnosticMessage("Going to execute batch: " + pathToOurInstallBatchFile);
 
             // start the installer helper
             Process process = new Process
                 {
                     StartInfo =
                         {
-                            FileName = cmd, 
+                            FileName = pathToOurInstallBatchFile, 
                             WindowStyle = ProcessWindowStyle.Hidden
                         }
                 };
@@ -1035,16 +1046,16 @@ namespace NetSparkle
             bool isDSAOk = false;
             if (!e.Cancelled && e.Error == null)
             {
-                ReportDiagnosticMessage("Finished downloading file to: " + _downloadTempFileName);
+                ReportDiagnosticMessage("Finished downloading file to: " + _downloadTempFilePath);
 
                 // report
                 ReportDiagnosticMessage("Performing DSA check");
 
                 // get the assembly
-                if (File.Exists(_downloadTempFileName))
+                if (File.Exists(_downloadTempFilePath))
                 {
                     // check if the file was downloaded successfully
-                    String absolutePath = Path.GetFullPath(_downloadTempFileName);
+                    String absolutePath = Path.GetFullPath(_downloadTempFilePath);
                     if (!File.Exists(absolutePath))
                         throw new FileNotFoundException();
 
@@ -1067,7 +1078,7 @@ namespace NetSparkle
                             {
                                 // check the DSA Code and modify the back color            
                                 NetSparkleDSAVerificator dsaVerifier = new NetSparkleDSAVerificator("NetSparkle_DSA.pub");
-                                isDSAOk = dsaVerifier.VerifyDSASignature(UserWindow.CurrentItem.DSASignature, _downloadTempFileName);
+                                isDSAOk = dsaVerifier.VerifyDSASignature(UserWindow.CurrentItem.DSASignature, _downloadTempFilePath);
                             }
                         }
                     }
