@@ -57,11 +57,12 @@ NetSparkle is an easy-to-use software update framework for .NET developers on Wi
 ## Other Options
 
 An incomplete list of other .net projects related to updating:
- 
+ - [Squirrel.Windows] <--- This is what I'd try on my next .net app. Nuget based, delta packages.
  - [Sparkle Dot Net]
  - [NAppUpdate]
 
 [CodePlex]: http://netsparkle.codeplex.com
 [MIT Licensed]: http://netsparkle.codeplex.com/license
+[Squirrel.Windows]: https://github.com/Squirrel/Squirrel.Windows
 [Sparkle Dot Net]: https://github.com/iKenndac/SparkleDotNET
 [NAppUpdate]: https://github.com/synhershko/NAppUpdate

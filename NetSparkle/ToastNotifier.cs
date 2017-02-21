@@ -87,7 +87,9 @@ namespace NetSparkle
 			if (startPosY > Screen.PrimaryScreen.WorkingArea.Height)
 			{
 				_goDownTimer.Stop();
-				Close();
+				//If the client app starts with a "show dialog" open (e.g., selecting a file to open), this Close() actually closes *that* dialog, which is, um, bad.
+				//So I'm just going to not do the close, figuring that it only runs once per run of the application anyhow
+				//Close();
 			}
 			else
 				SetDesktopLocation(startPosX, startPosY);
