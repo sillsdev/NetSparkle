@@ -15,7 +15,6 @@ namespace NetSparkle
     public partial class NetSparkleForm : Form, INetSparkleForm
     {
         NetSparkleAppCastItem _currentItem;
-        private TempFile _htmlTempFile;
 
         /// <summary>
         /// Event fired when the user has responded to the 
@@ -83,21 +82,6 @@ namespace NetSparkle
             TopMost = true;
         }
 
-        /// <summary>
-        /// </summary>
-        protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
-        {
-            try
-            {
-                _htmlTempFile.Dispose();//will try to delete it
-            }
-            catch
-            {
-                //not worth complaining about, just leaks to temp folder
-            }
-            base.OnClosing(e);
-        }
-
         private void ShowMarkdownReleaseNotes(NetSparkleAppCastItem item)
         {
             string contents;
@@ -109,13 +93,14 @@ namespace NetSparkle
             {
                 using (var webClient = new WebClient())
                 {
-                    contents = webClient.DownloadString(item.ReleaseNotesLink);
+                    // This looks overly complex (vs. simply calling webClient.DownloadString), but it ensures that
+                    // the encoding is preserved so that special characters (e.g., curly quotes) do not get clobbered.
+                    contents = (new System.IO.StreamReader(new MemoryStream(webClient.DownloadData(item.ReleaseNotesLink)), true)).ReadToEnd();
                 }
             }
             var md = new MarkdownSharp.Markdown();
-            _htmlTempFile = TempFile.WithExtension("htm");
-            File.WriteAllText(_htmlTempFile.Path, md.Transform(contents));
-            NetSparkleBrowser.Navigate(_htmlTempFile.Path);
+            contents = md.Transform(contents);
+            NetSparkleBrowser.DocumentText = contents;
         }
 
      
